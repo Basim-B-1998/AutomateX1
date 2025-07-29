@@ -21,6 +21,7 @@ import { LinkButton } from "@/components/buttons/LinkButton";
 interface Zap {
   id: string;
   triggerId: string;
+  createdAt: string;
   action: {
     id: string;
     zapId: string;
@@ -117,7 +118,7 @@ const router = useRouter()
                     ))}
             </TableCell>
             <TableCell>{z.id}</TableCell>
-            <TableCell>Nov 13, 2023</TableCell>
+            <TableCell>{new Date(z.createdAt).toLocaleDateString()}</TableCell>
             <TableCell>{`${HOOKS_URL}/hooks/catch/1/${z.id}`}</TableCell>
             <TableCell>
               <LinkButton

@@ -1,52 +1,61 @@
-"use strict";
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
+const express = require("express");
+const { PrismaClient } = require("@prisma/client");
+
+const client = new PrismaClient();
+const app = express();
+
+app.use(express.json());
+
+app.post("/hooks/catch/:userId/:zapId", async (req, res) => {
+  const userId = req.params.userId;
+  const zapId = req.params.zapId.trim();
+  const body = req.body;
+
+  console.log("===> Webhook received");
+  console.log("zapId:", zapId);
+  console.log("Request body:", body);
+
+  try {
+    await client.$transaction(async tx => {
+      console.log("===> Inside transaction");
+
+      // ✅ check if zap exists
+      const zap = await tx.zap.findUnique({
+        where: { id: zapId }
+      });
+      console.log("Found zap:", zap);
+
+      if (!zap) {
+        throw new Error(`Zap with id ${zapId} does not exist`);
+      }
+
+      // Create ZapRun
+      const run = await tx.zapRun.create({
+        data: {
+          zapId: zapId,
+          metadata: body
+        }
+      });
+      console.log("Created ZapRun:", run);
+
+      // Create ZapRunOutbox
+      await tx.zapRunOutbox.create({
+        data: {
+          zapRunId: run.id
+        }
+      });
+      console.log("Created ZapRunOutbox for run.id:", run.id);
     });
-};
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-const express_1 = __importDefault(require("express"));
-const client_1 = require("@prisma/client");
-const client = new client_1.PrismaClient();
-const app = (0, express_1.default)();
-app.use(express_1.default.json());
-//https://hooks.zapier.com/hooks/catch/23532506/ub66xda/
-//password logic
-app.post("/hooks/catch/:userId/:zapId", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const userId = req.params.userId;
-    const zapId = req.params.zapId;
-    const body = req.body;
-    console.log("reached here");
-    console.log("BODY RECEIVED:", body);
-    // store in db a new trigger
-    yield client.$transaction((tx) => __awaiter(void 0, void 0, void 0, function* () {
-        console.log("reached here 2");
-        // Create ZapRun
-        const run = yield tx.zapRun.create({
-            data: {
-                zapId: zapId,
-                metadata: body
-            }
-        });
-        console.log("reached here 3");
-        // Create ZapRunOutbox
-        yield tx.zapRunOutbox.create({
-            data: {
-                zapRunId: run.id
-            }
-        });
-    }));
+
     res.json({
-        message: "webhook received"
+      message: "Webhook received and processed"
     });
-}));
+  } catch (e) {
+    console.error("Error caught:", e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.listen(3002, () => {
-    console.log("Server running on http://localhost:3002");
+  console.log("✅ Server running on http://localhost:3002");
 });
